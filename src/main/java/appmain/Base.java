@@ -5,8 +5,12 @@ import io.appium.java_client.android.AndroidElement;
 import io.appium.java_client.remote.MobileCapabilityType;
 import io.appium.java_client.service.local.AppiumDriverLocalService;
 import io.appium.java_client.service.local.AppiumServiceBuilder;
+import org.apache.commons.io.FileUtils;
+import org.openqa.selenium.OutputType;
+import org.openqa.selenium.TakesScreenshot;
+import org.openqa.selenium.WebElement;
 import org.openqa.selenium.remote.DesiredCapabilities;
-
+import java.util.concurrent.TimeUnit;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -16,6 +20,8 @@ import java.net.URL;
 import java.util.Properties;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
 import org.testng.annotations.BeforeSuite;
 
 
@@ -25,39 +31,50 @@ public class Base {
 	public static AppiumDriverLocalService appiumService;
 	public static AndroidDriver<AndroidElement>  driver;
 	public static Logger logger;
-	
+	public static Properties config;
+
 	@BeforeSuite
-	public void stopAppiumServerBeforeSuite() {
-		// delete any local appium instance running before running tests
+	public void stopAppiumServerBeforeSuite() throws IOException {
+		 //delete any local appium instance running before running tests
 		boolean flag = checkIfServerIsRunnning(4723);
 		if (flag) {
-		stopServer();
-		sleep(5000);
+			stopServer();
+			sleep(5000);
 		}
-		
+		getConfig();
 		log();
 	}
-	    
 
-	public static AndroidDriver<AndroidElement> Capabilities() throws MalformedURLException, IOException {
-
+	public void getConfig() throws IOException {
 		// System.getProperty("user.dir") : gets the project path
 		FileInputStream file = new FileInputStream(System.getProperty("user.dir") + "/src/main/java/appmain/global.properties");
-		Properties prop = new Properties();
-		prop.load(file);
+		config = new Properties();
+		config.load(file);
+	}
 
-		File appDir = new File("src");
-		File app = new File(appDir, (String) prop.get("appName"));
+	public static AndroidDriver<AndroidElement> Capabilities(Boolean app) throws MalformedURLException, IOException {
+
 		DesiredCapabilities capabilities = new DesiredCapabilities();
-		capabilities.setCapability(MobileCapabilityType.DEVICE_NAME, (String) prop.get("device"));
+
+		if (app) {
+			File appDir = new File("src");
+			File appApk = new File(appDir, (String) config.get("appName"));
+			capabilities.setCapability(MobileCapabilityType.APP, appApk.getAbsolutePath());
+		}
+		else {
+			capabilities.setCapability(MobileCapabilityType.BROWSER_NAME,"Chrome");
+		}
+
+		capabilities.setCapability(MobileCapabilityType.DEVICE_NAME, (String) config.get("device"));
 		capabilities.setCapability(MobileCapabilityType.NO_RESET, true);
-		// capabilities.setCapability(MobileCapabilityType.AUTOMATION_NAME, "uiautomator2"); //uiautomator2 this gives error understand why
-		capabilities.setCapability(MobileCapabilityType.APP, app.getAbsolutePath());
+		capabilities.setCapability(MobileCapabilityType.AUTOMATION_NAME, "uiautomator2"); //uiautomator2 this gives error understand why
+		capabilities.setCapability(MobileCapabilityType.PLATFORM_NAME, "Android");
 		driver = new AndroidDriver<>(new URL("http://127.0.0.1:4723/wd/hub"), capabilities);
+		driver.manage().timeouts().implicitlyWait(15, TimeUnit.SECONDS);
 		return driver;
 
 	}
-	
+
 	public void log() {
 		logger= Logger.getLogger("Log4j_Demo");
         File appDir = new File("src");
@@ -70,15 +87,11 @@ public class Base {
 	public AppiumDriverLocalService startServer() throws IOException {
 		// use this when u will just run using mvn test command (not from inside the IDE)
 		// appiumService = AppiumDriverLocalService.buildService(new AppiumServiceBuilder().usingPort(4723));
-		FileInputStream file = new FileInputStream(System.getProperty("user.dir") + "/src/main/java/appmain/global.properties");
-		Properties prop = new Properties();
-		prop.load(file);
-			
 		boolean flag = checkIfServerIsRunnning(4723);
 		if (!flag) {
 			appiumService = AppiumDriverLocalService.buildService(new AppiumServiceBuilder()
-					.usingDriverExecutable(new File((String) prop.get("node_bin")))
-					.withAppiumJS(new File((String) prop.get("appium_main")))
+					.usingDriverExecutable(new File((String) config.get("node_bin")))
+					.withAppiumJS(new File((String) config.get("appium_main")))
 					.usingPort(4723));
 			appiumService.start();
 		}
@@ -95,7 +108,6 @@ public class Base {
 	}
 	
 	public static boolean checkIfServerIsRunnning(int port) {
-		
 		boolean isServerRunning = false;
 		ServerSocket serverSocket;
 		try {
@@ -112,6 +124,13 @@ public class Base {
 			}
 		return isServerRunning;
 		}
+
+	public void waitAndClick(WebElement ele){
+		WebDriverWait wait = new WebDriverWait(driver, 15);
+		wait.until(ExpectedConditions.elementToBeClickable(ele));
+		ele.click();
+
+	}
 	
 	public static void sleep(int ms) {
 	    try {
@@ -119,6 +138,11 @@ public class Base {
 	    } catch (InterruptedException e) {
 	        System.err.format("IOException: %s%n", e);
 	    }
+	}
+
+	public static void takeScreenshot(String testName) throws IOException {
+		File scrShotFile = ((TakesScreenshot)driver).getScreenshotAs(OutputType.FILE);
+		FileUtils.copyFile(scrShotFile, new File(System.getProperty("user.dir") + "/" + testName + ".png"));
 	}
 
 }
